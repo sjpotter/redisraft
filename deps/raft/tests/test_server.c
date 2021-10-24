@@ -2621,6 +2621,46 @@ void TestRaft_leader_sends_appendentries_when_node_has_next_idx_of_0(
     CuAssertTrue(tc, ae->prev_log_idx == 0);
 }
 
+void TestRaft_leader_updates_next_idx_on_send_ae(CuTest *tc)
+{
+    raft_cbs_t funcs = {
+            .send_appendentries = sender_appendentries,
+            .log                = NULL
+    };
+
+    void *sender = sender_new(NULL);
+    void *r = raft_new();
+    raft_set_callbacks(r, &funcs, sender);
+    raft_add_node(r, NULL, 1, 1);
+    raft_add_node(r, NULL, 2, 0);
+
+    /* i'm leader */
+    raft_set_state(r, RAFT_STATE_LEADER);
+
+    /* receive appendentries messages */
+    raft_node_t* n = raft_get_node(r, 2);
+    raft_send_appendentries(r, n);
+    msg_appendentries_t*  ae = sender_poll_msg_data(sender);
+
+    raft_node_set_next_idx(n, 1);
+    __RAFT_APPEND_ENTRY(r, 100, 1, "aaa");
+    raft_send_appendentries(r, n);
+    ae = sender_poll_msg_data(sender);
+    CuAssertPtrNotNull(tc, ae);
+    CuAssertIntEquals(tc, 0,ae->prev_log_idx);
+    CuAssertIntEquals(tc, 1, ae->n_entries);
+    CuAssertIntEquals(tc, 2, raft_node_get_next_idx(n));
+
+    raft_node_set_next_idx(n, 1);
+    __RAFT_APPEND_ENTRY(r, 101, 1, "bbb");
+    raft_send_appendentries(r, n);
+    ae = sender_poll_msg_data(sender);
+    CuAssertPtrNotNull(tc, ae);
+    CuAssertIntEquals(tc, 0,ae->prev_log_idx);
+    CuAssertIntEquals(tc, 2, ae->n_entries);
+    CuAssertIntEquals(tc, 3, raft_node_get_next_idx(n));
+}
+
 /* 5.3 */
 void TestRaft_leader_retries_appendentries_with_decremented_NextIdx_log_inconsistency(
     CuTest * tc)
@@ -3061,10 +3101,13 @@ void TestRaft_leader_recv_appendentries_response_jumps_to_lower_next_idx(
 
     msg_appendentries_t* ae;
 
-    /* become leader sets next_idx to current_idx */
+    /* become leader sets next_idx to current_idx
+     * it also appends a NO_OP, and as raft_send_appendentries()
+     * updates next_idx, its now one greater
+     */
     raft_become_leader(r);
     raft_node_t* node = raft_get_node(r, 2);
-    CuAssertIntEquals(tc, 5, raft_node_get_next_idx(node));
+    CuAssertIntEquals(tc, 6, raft_node_get_next_idx(node));
     CuAssertTrue(tc, NULL != (ae = sender_poll_msg_data(sender)));
 
     /* FIRST entry log application */
@@ -3072,8 +3115,8 @@ void TestRaft_leader_recv_appendentries_response_jumps_to_lower_next_idx(
      * server will be waiting for response */
     raft_send_appendentries(r, raft_get_node(r, 2));
     CuAssertTrue(tc, NULL != (ae = sender_poll_msg_data(sender)));
-    CuAssertIntEquals(tc, 4, ae->prev_log_term);
-    CuAssertIntEquals(tc, 4, ae->prev_log_idx);
+    CuAssertIntEquals(tc, 2, ae->prev_log_term);
+    CuAssertIntEquals(tc, 5, ae->prev_log_idx);
 
     /* receive mock success responses */
     memset(&aer, 0, sizeof(msg_appendentries_response_t));
@@ -3081,7 +3124,7 @@ void TestRaft_leader_recv_appendentries_response_jumps_to_lower_next_idx(
     aer.success = 0;
     aer.current_idx = 1;
     raft_recv_appendentries_response(r, raft_get_node(r, 2), &aer);
-    CuAssertIntEquals(tc, 2, raft_node_get_next_idx(node));
+    CuAssertIntEquals(tc, 6, raft_node_get_next_idx(node));
 
     /* see if new appendentries have appropriate values */
     CuAssertTrue(tc, NULL != (ae = sender_poll_msg_data(sender)));
@@ -3118,7 +3161,7 @@ void TestRaft_leader_recv_appendentries_response_decrements_to_lower_next_idx(
     /* become leader sets next_idx to current_idx */
     raft_become_leader(r);
     raft_node_t* node = raft_get_node(r, 2);
-    CuAssertIntEquals(tc, 5, raft_node_get_next_idx(node));
+    CuAssertIntEquals(tc, 6, raft_node_get_next_idx(node));
     CuAssertTrue(tc, NULL != (ae = sender_poll_msg_data(sender)));
 
     /* FIRST entry log application */
@@ -3126,8 +3169,8 @@ void TestRaft_leader_recv_appendentries_response_decrements_to_lower_next_idx(
      * server will be waiting for response */
     raft_send_appendentries(r, raft_get_node(r, 2));
     CuAssertTrue(tc, NULL != (ae = sender_poll_msg_data(sender)));
-    CuAssertIntEquals(tc, 4, ae->prev_log_term);
-    CuAssertIntEquals(tc, 4, ae->prev_log_idx);
+    CuAssertIntEquals(tc, 2, ae->prev_log_term);
+    CuAssertIntEquals(tc, 5, ae->prev_log_idx);
 
     /* receive mock success responses */
     memset(&aer, 0, sizeof(msg_appendentries_response_t));
@@ -3135,7 +3178,7 @@ void TestRaft_leader_recv_appendentries_response_decrements_to_lower_next_idx(
     aer.success = 0;
     aer.current_idx = 3;
     raft_recv_appendentries_response(r, raft_get_node(r, 2), &aer);
-    CuAssertIntEquals(tc, 4, raft_node_get_next_idx(node));
+    CuAssertIntEquals(tc, 6, raft_node_get_next_idx(node));
 
     /* see if new appendentries have appropriate values */
     CuAssertTrue(tc, NULL != (ae = sender_poll_msg_data(sender)));
@@ -3148,7 +3191,7 @@ void TestRaft_leader_recv_appendentries_response_decrements_to_lower_next_idx(
     aer.success = 0;
     aer.current_idx = 2;
     raft_recv_appendentries_response(r, raft_get_node(r, 2), &aer);
-    CuAssertIntEquals(tc, 3, raft_node_get_next_idx(node));
+    CuAssertIntEquals(tc, 6, raft_node_get_next_idx(node));
 
     /* see if new appendentries have appropriate values */
     CuAssertTrue(tc, NULL != (ae = sender_poll_msg_data(sender)));
@@ -3436,9 +3479,9 @@ void TestRaft_leader_recv_appendentries_response_failure_does_not_set_node_nexti
     aer.current_idx = 0;
     raft_node_t* p = raft_get_node(r, 2);
     raft_recv_appendentries_response(r, p, &aer);
-    CuAssertTrue(tc, 1 == raft_node_get_next_idx(p));
+    CuAssertIntEquals(tc, 2,  raft_node_get_next_idx(p));
     raft_recv_appendentries_response(r, p, &aer);
-    CuAssertTrue(tc, 1 == raft_node_get_next_idx(p));
+    CuAssertIntEquals(tc, 2, raft_node_get_next_idx(p));
 }
 
 void TestRaft_leader_recv_appendentries_response_increment_idx_of_node(
@@ -4641,6 +4684,7 @@ int main(void)
     SUITE_ADD_TEST(suite, TestRaft_leader_sends_appendentries_with_leader_commit);
     SUITE_ADD_TEST(suite, TestRaft_leader_sends_appendentries_with_prevLogIdx);
     SUITE_ADD_TEST(suite, TestRaft_leader_sends_appendentries_when_node_has_next_idx_of_0);
+    SUITE_ADD_TEST(suite, TestRaft_leader_updates_next_idx_on_send_ae);
     SUITE_ADD_TEST(suite, TestRaft_leader_retries_appendentries_with_decremented_NextIdx_log_inconsistency);
     SUITE_ADD_TEST(suite, TestRaft_leader_append_entry_to_log_increases_idxno);
     SUITE_ADD_TEST(suite, TestRaft_leader_recv_appendentries_response_increase_commit_idx_when_majority_have_entry_and_atleast_one_newer_entry);
