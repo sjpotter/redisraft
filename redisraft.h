@@ -552,6 +552,9 @@ typedef struct RaftReq {
             raft_node_id_t id;
         } node_shutdown;
         raft_node_id_t node_to_transfer_leader;
+        struct {
+            RedisModuleString *id;
+        } cluster_init;
     } r;
 } RaftReq;
 
