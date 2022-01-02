@@ -2364,13 +2364,13 @@ void applyShardGroupChange(RedisRaftCtx *rr, raft_entry_t *entry)
 void replaceShardGroups(RedisRaftCtx *rr, raft_entry_t *entry)
 {
     // 1. reset sharding info
-    ShardingInfo * si = rr->sharding_info;
+    ShardingInfo *si = rr->sharding_info;
 
     ShardGroup *local = NULL;
     if (si->shard_group_map != NULL) {
         RedisModuleDictIter *iter = RedisModule_DictIteratorStartC(si->shard_group_map, "^", NULL, 0);
 
-        char * key;
+        char *key;
         size_t key_len;
         ShardGroup *data;
 
@@ -2385,8 +2385,6 @@ void replaceShardGroups(RedisRaftCtx *rr, raft_entry_t *entry)
         RedisModule_DictIteratorStop(iter);
         RedisModule_FreeDict(rr->ctx, si->shard_group_map);
         si->shard_group_map = NULL;
-
-        RedisModule_Free(si->shard_group_map);
     }
 
     /* if we didn't identify the local shard group, we have a problem */
@@ -2405,11 +2403,11 @@ void replaceShardGroups(RedisRaftCtx *rr, raft_entry_t *entry)
      * payload structure
      * "# shard groups:payload1 len:payload1:....:payload n len:payload n:"
      */
-    char * payload = entry->data;
-    char * pPayload = strchr(payload, ':');
+    char *payload = entry->data;
+    char *pPayload = strchr(payload, ':');
     *pPayload = 0;
 
-    char * endptr;
+    char *endptr;
     size_t num_payloads = strtoul(payload, &endptr, 10);
     // verify we read all bytes belong to number */
     RedisModule_Assert(endptr == pPayload);
@@ -2434,7 +2432,7 @@ void replaceShardGroups(RedisRaftCtx *rr, raft_entry_t *entry)
             /* 2b. if payload is for remote shardgroup, deserialize and add with ShardingInfoAddShardGroup() */
             RedisModule_Assert(ShardingInfoAddShardGroup(rr, &sg) == RR_OK);
         }
-
+        ShardGroupFree(&sg);
         payload += payload_len + 1;
     }
 
@@ -2482,7 +2480,6 @@ void handleShardGroupsReplace(RedisRaftCtx *rr, RaftReq *req)
     /* Must be done on a leader */
     if (checkRaftState(rr, req) == RR_ERROR ||
         checkLeader(rr, req, NULL) == RR_ERROR) {
-        RedisModule_ReplyWithError(req->ctx, "failed, please check logs.");
         goto exit;
     }
 
