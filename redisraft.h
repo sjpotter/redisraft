@@ -553,7 +553,7 @@ typedef struct RaftReq {
         } node_shutdown;
         raft_node_id_t node_to_transfer_leader;
         struct {
-            RedisModuleString *id;
+            char id[RAFT_DBID_LEN];
         } cluster_init;
     } r;
 } RaftReq;
