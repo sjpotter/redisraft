@@ -2403,7 +2403,8 @@ void replaceShardGroups(RedisRaftCtx *rr, raft_entry_t *entry)
      * payload structure
      * "# shard groups:payload1 len:payload1:....:payload n len:payload n:"
      */
-    char *payload = entry->data;
+    char *payload = RedisModule_Alloc(entry->data_len);
+    memcpy(payload, entry->data, entry->data_len);
     char *pPayload = strchr(payload, ':');
     *pPayload = 0;
 
@@ -2423,7 +2424,7 @@ void replaceShardGroups(RedisRaftCtx *rr, raft_entry_t *entry)
         ShardGroup sg;
         if (ShardGroupDeserialize(payload, payload_len, &sg) != RR_OK) {
             LOG_ERROR("Failed to deserialize shardgroup payload: [%.*s]", (int) payload_len, payload);
-            return;
+            goto exit;
         }
 
         if (!memcmp(rr->snapshot_info.dbid, sg.id, sizeof(sg.id))) {
@@ -2445,6 +2446,9 @@ void replaceShardGroups(RedisRaftCtx *rr, raft_entry_t *entry)
 
         entry->user_data = NULL;
     }
+
+exit:
+    RedisModule_Free(payload);
 }
 
 /* Handle adding of ShardGroup.
