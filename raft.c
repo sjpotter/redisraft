@@ -2403,7 +2403,8 @@ void replaceShardGroups(RedisRaftCtx *rr, raft_entry_t *entry)
      * payload structure
      * "# shard groups:payload1 len:payload1:....:payload n len:payload n:"
      */
-    char *payload = RedisModule_Alloc(entry->data_len);
+    char *payload_base = RedisModule_Alloc(entry->data_len);
+    char *payload = payload_base;
     memcpy(payload, entry->data, entry->data_len);
     char *pPayload = strchr(payload, ':');
     *pPayload = 0;
@@ -2448,7 +2449,7 @@ void replaceShardGroups(RedisRaftCtx *rr, raft_entry_t *entry)
     }
 
 exit:
-    RedisModule_Free(payload);
+    RedisModule_Free(payload_base);
 }
 
 /* Handle adding of ShardGroup.
