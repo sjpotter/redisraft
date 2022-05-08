@@ -32,6 +32,7 @@ const char *RaftReqTypeStr[] = {
     [RR_TRANSFER_LEADER]      = "RR_TRANSFER_LEADER",
     [RR_MIGRATE_KEYS]         = "RR_MIGRATE_KEYS",
     [RR_DELETE_UNLOCK_KEYS]   = "RR_DELETE_UNLOCK_KEYS",
+    [RR_IMPORT_KEYS]          = "RR_IMPORT_KEYS",
 };
 
 /* Forward declarations */
