@@ -1297,6 +1297,108 @@ static int cmdRaftRandom(RedisModuleCtx *ctx,
     return REDISMODULE_OK;
 }
 
+static int cmdRaftScan(RedisModuleCtx *ctx,
+                         RedisModuleString **argv, int argc)
+{
+    if (argc < 3) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_OK;
+    }
+
+    char cursor[15] = {'0', 0};
+    char slots[REDIS_RAFT_HASH_SLOTS] = {0};
+    char * slot_str;
+
+    size_t str_len;
+    const char * str = RedisModule_StringPtrLen(argv[1], &str_len);
+
+
+    if (strncasecmp("slots", str, str_len) != 0) {
+        strncpy(cursor, str, str_len);
+        if (argc != 4) {
+            RedisModule_WrongArity(ctx);
+            return REDISMODULE_OK;
+        }
+
+        str = RedisModule_StringPtrLen(argv[2], &str_len);
+        if (strncasecmp("slots", str, str_len) != 0) {
+            RedisModule_ReplyWithError(ctx, "ERR unexpected argument");
+            return REDISMODULE_OK;
+        }
+        str = RedisModule_StringPtrLen(argv[3], &str_len);
+        slot_str = strndup(str, str_len);
+    } else {
+        if (argc != 3) {
+            RedisModule_WrongArity(ctx);
+            return REDISMODULE_OK;
+        }
+        str = RedisModule_StringPtrLen(argv[2], &str_len);
+        slot_str = strndup(str, str_len);
+    }
+
+    int ret = parseHashSlots(slots, slot_str);
+    free(slot_str);
+    if (ret != RR_OK) {
+        RedisModule_ReplyWithError(ctx, "ERR couldn't parse slots");
+        return REDISMODULE_OK;
+    }
+
+    RedisModuleCallReply *reply;
+     if (!(reply = RedisModule_Call(ctx, "scan", "ccc", cursor, "count", "1000"))) {
+         RedisModule_ReplyWithError(ctx, "ERR scan failed");
+         return REDISMODULE_OK;
+     }
+
+     if (RedisModule_CallReplyType(reply) != REDISMODULE_REPLY_ARRAY) {
+         RedisModule_ReplyWithError(ctx, "ERR scan returned unexpected reply type");
+         goto exit;
+     }
+
+     if (RedisModule_CallReplyLength(reply) != 2) {
+         RedisModule_ReplyWithError(ctx, "ERR scan returned unexpected array length");
+         goto exit;
+     }
+
+     RedisModuleCallReply *rCursor = RedisModule_CallReplyArrayElement(reply, 0);
+     if (RedisModule_CallReplyType(rCursor) != REDISMODULE_REPLY_STRING) {
+         RedisModule_ReplyWithError(ctx, "ERR scan returned unexpected type for cursor");
+         goto exit;
+     }
+     RedisModuleCallReply *list = RedisModule_CallReplyArrayElement(reply, 1);
+     if (RedisModule_CallReplyType(list) != REDISMODULE_REPLY_ARRAY) {
+         RedisModule_ReplyWithError(ctx, "ERR scan returned unexpected type for key list");
+         goto exit;
+     }
+
+     for (size_t i = 0; i < RedisModule_CallReplyLength(list); i++) {
+         if (RedisModule_CallReplyType(RedisModule_CallReplyArrayElement(list, i)) != REDISMODULE_REPLY_STRING) {
+             RedisModule_ReplyWithError(ctx, "ERR scan returned unexpected type for a key");
+             goto exit;
+         }
+     }
+
+     RedisModule_ReplyWithArray(ctx, 2);
+     RedisModule_ReplyWithCallReply(ctx, rCursor);
+     RedisModule_ReplyWithArray(ctx, REDISMODULE_POSTPONED_LEN);
+     long count = 0;
+     for (size_t i = 0; i < RedisModule_CallReplyLength(list); i++) {
+         RedisModuleCallReply * key = RedisModule_CallReplyArrayElement(list, i);
+         str = RedisModule_CallReplyStringPtr(key, &str_len);
+         unsigned int slot = keyHashSlot(str, str_len);
+         if (slots[slot]) {
+             count++;
+             RedisModule_ReplyWithArray(ctx, 2);
+             RedisModule_ReplyWithCallReply(ctx, key);
+             RedisModule_ReplyWithLongLong(ctx, slot);
+         }
+     }
+     RedisModule_ReplySetArrayLength(ctx, count);
+
+exit:
+    RedisModule_FreeCallReply(reply);
+    return REDISMODULE_OK;
+}
+
 #ifdef HAVE_TLS
 /* Callback for passing a keyfile password stored as a char * to OpenSSL,  copied from redis */
 static int tlsPasswordCallback(char *buf, int size, int rwflag, void *u)
@@ -1627,6 +1729,11 @@ static int registerRaftCommands(RedisModuleCtx *ctx)
 
     if (RedisModule_CreateCommand(ctx, "raft._reject_random_command",
                                   cmdRaftRandom, "admin", 0,0,0) == REDISMODULE_ERR) {
+        return REDISMODULE_ERR;
+    }
+
+    if (RedisModule_CreateCommand(ctx, "raft.scan",
+                                  cmdRaftScan, "admin", 0,0,0) == REDISMODULE_ERR) {
         return REDISMODULE_ERR;
     }
 

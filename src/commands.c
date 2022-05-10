@@ -147,6 +147,7 @@ RRStatus CommandSpecInit(RedisModuleCtx *ctx, RedisRaftConfig *config)
             { "raft.timeout_now",             CMD_SPEC_DONT_INTERCEPT },
             { "raft._sort_reply",             CMD_SPEC_DONT_INTERCEPT },
             { "raft._reject_random_command",  CMD_SPEC_DONT_INTERCEPT },
+            { "raft.scan",                    CMD_SPEC_READONLY },
 
             { NULL,0 }
     };
