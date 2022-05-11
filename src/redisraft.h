@@ -749,7 +749,7 @@ RRStatus formatExactMemorySize(unsigned long value, char *buf, size_t buf_size);
 void handleRMCallError(RedisModuleCtx *reply_ctx, int ret_errno, const char *cmd, size_t cmdlen);
 void AddBasicLocalShardGroup(RedisRaftCtx *rr);
 void HandleAsking(RaftRedisCommandArray *cmds);
-unsigned int keyHashSlot(const char *key, int keylen);
+unsigned int keyHashSlot(RedisModuleString * key);
 RRStatus parseHashSlots(char * slots, char * string);
 
 /* log.c */

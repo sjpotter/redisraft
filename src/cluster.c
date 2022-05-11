@@ -1127,9 +1127,9 @@ RRStatus computeHashSlot(RedisRaftCtx *rr,
         int num_keys = 0;
         int *keyindex = RedisModule_GetCommandKeys(rr->ctx, cmd->argv, cmd->argc, &num_keys);
         for (int j = 0; j < num_keys; j++) {
-            size_t key_len;
-            const char *key = RedisModule_StringPtrLen(cmd->argv[keyindex[j]], &key_len);
-            int thisslot = (int) keyHashSlot(key, (int) key_len);
+            RedisModuleString *key = cmd->argv[keyindex[j]];
+
+            int thisslot = (int) keyHashSlot(key);
 
             if (*slot == -1) {
                 /* First key */
