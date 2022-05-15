@@ -555,20 +555,21 @@ bool local;                          /* ShardGroup struct that corresponds to lo
 * RedisRaft clusters operate together to perform sharding.
 */
 typedef struct ShardingInfo {
-unsigned int shard_groups_num;       /* Number of shard groups */
-RedisModuleDict *shard_group_map;    /* shard group id -> x in shard_groups[x] */
+    unsigned int shard_groups_num;       /* Number of shard groups */
+    RedisModuleDict *shard_group_map;    /* shard group id -> x in shard_groups[x] */
+    bool is_sharding;                    /* set when we are in a sharding mode */
 
-/* Maps hash slots to ShardGroups indexes.
-*
-* Note that a one-based index into the shard_groups array is used,
-* since a zero value indicates the slot is unassigned. The index
-* should therefore be adjusted before refering the array.
-*/
-ShardGroup *stable_slots_map[REDIS_RAFT_HASH_SLOTS];
-ShardGroup *importing_slots_map[REDIS_RAFT_HASH_SLOTS];
-ShardGroup *migrating_slots_map[REDIS_RAFT_HASH_SLOTS];
+    /* Maps hash slots to ShardGroups indexes.
+     *
+     * Note that a one-based index into the shard_groups array is used,
+     * since a zero value indicates the slot is unassigned. The index
+     * should therefore be adjusted before refering the array.
+     */
+    ShardGroup *stable_slots_map[REDIS_RAFT_HASH_SLOTS];
+    ShardGroup *importing_slots_map[REDIS_RAFT_HASH_SLOTS];
+    ShardGroup *migrating_slots_map[REDIS_RAFT_HASH_SLOTS];
 
-raft_term_t max_importing_term[REDIS_RAFT_HASH_SLOTS];
+    raft_term_t max_importing_term[REDIS_RAFT_HASH_SLOTS];
 } ShardingInfo;
 
 typedef struct {
