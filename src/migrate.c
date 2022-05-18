@@ -32,7 +32,6 @@ void raftAppendRaftDeleteEntry(RedisRaftCtx *rr, RaftReq *req)
 
 static void transferKeysResponse(redisAsyncContext *c, void *r, void *privdata)
 {
-    LOG_WARNING("calling transferKeysResponse");
     Connection *conn = privdata;
     JoinLinkState *state = ConnGetPrivateData(conn);
     RedisRaftCtx *rr = ConnGetRedisRaftCtx(conn);
@@ -66,7 +65,6 @@ static void transferKeysResponse(redisAsyncContext *c, void *r, void *privdata)
 
 static void transferKeys(Connection *conn)
 {
-    LOG_WARNING("calling transferKeys");
     RedisRaftCtx *rr = ConnGetRedisRaftCtx(conn);
     JoinLinkState *state = ConnGetPrivateData(conn);
     RaftReq *req = state->req;
@@ -89,9 +87,11 @@ static void transferKeys(Connection *conn)
     argv[0] = RedisModule_Strdup("RAFT.IMPORT");
     argv_len[0] = strlen("RAFT.IMPORT");
     argv[1] = RedisModule_Alloc(32);
-    int n = snprintf(argv[1], 64, "%ld", req->r.migrate_keys.migrate_term);
+    int n = snprintf(argv[1], 32, "%ld", req->r.migrate_keys.migrate_term);
     argv_len[1] = n;
     argv[2] = RedisModule_Alloc(32);
+    n = snprintf(argv[2], 32, "%lld", sg->slot_ranges[0].magic);
+    argv_len[2] = n;
 
     for (size_t i = 0; i < req->r.migrate_keys.num_keys; i++) {
         if (req->r.migrate_keys.keys_serialized[i] == NULL) {
@@ -143,7 +143,7 @@ void MigrateKeys(RedisRaftCtx *rr, RaftReq *req)
             req->r.migrate_keys.num_serialized_keys++;
 
             enterRedisModuleCall();
-            RedisModuleCallReply *reply = RedisModule_Call(rr->ctx, "DUMP", "c", key);
+            RedisModuleCallReply *reply = RedisModule_Call(rr->ctx, "DUMP", "s", key);
             exitRedisModuleCall();
 
             if (reply && RedisModule_CallReplyType(reply) == REDISMODULE_REPLY_STRING) {
@@ -168,7 +168,6 @@ void MigrateKeys(RedisRaftCtx *rr, RaftReq *req)
     }
 
      for (unsigned int i = 0; i < sg->nodes_num; i++) {
-        LOG_WARNING("MigrateKeys: adding %s:%d", sg->nodes[i].addr.host, sg->nodes[i].addr.port);
         NodeAddrListAddElement(&state->addr, &sg->nodes[i].addr);
     }
     state->req = req;

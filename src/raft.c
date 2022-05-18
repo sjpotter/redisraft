@@ -354,7 +354,7 @@ static void lockKeys(RedisRaftCtx *rr, raft_entry_t *entry)
                 if (req) {
                     RedisModule_ReplyWithError(req->ctx, "ERR keys don't all belong to same slot");
                 }
-                goto exit;
+                goto error;
             }
         }
     }
@@ -363,7 +363,7 @@ static void lockKeys(RedisRaftCtx *rr, raft_entry_t *entry)
         if (req) {
             RedisModule_ReplyWithSimpleString(req->ctx, "OK");
         }
-        goto exit;
+        goto error;
     }
 
     ShardingInfo *si = rr->sharding_info;
@@ -371,14 +371,14 @@ static void lockKeys(RedisRaftCtx *rr, raft_entry_t *entry)
         if (req) {
             RedisModule_ReplyWithError(req->ctx, "ERR not migratable keys");
         }
-        goto exit;
+        goto error;
     }
 
-    if (!si->importing_slots_map[slot] || si->migrating_slots_map[slot]->local) {
+    if (!si->importing_slots_map[slot] || si->importing_slots_map[slot]->local) {
         if (req) {
             RedisModule_ReplyWithError(req->ctx, "ERR not importable keys");
         }
-        goto exit;
+        goto error;
     }
 
     for (size_t i = 0; i < num_keys; i++) {
@@ -393,9 +393,13 @@ static void lockKeys(RedisRaftCtx *rr, raft_entry_t *entry)
 
     if (req) {
         memcpy(req->r.migrate_keys.shardGroupId, si->importing_slots_map[slot]->id, RAFT_DBID_LEN);
-        /* currently, we just return, but eventually this is where should kick off migration of the keys */
-        RedisModule_ReplyWithSimpleString(req->ctx, "OK");
-//        MigrateKeys(rr, req);
+        MigrateKeys(rr, req);
+        goto exit;
+    }
+
+error:
+    if (req) {
+        RaftReqFree(req);
     }
 
 exit:
@@ -404,9 +408,6 @@ exit:
     }
     RedisModule_Free(keys);
 
-    if (req) {
-        RaftReqFree(req);
-    }
 }
 
 static void unlockDeleteKeys(RedisRaftCtx *rr, raft_entry_t *entry)

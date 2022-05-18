@@ -886,7 +886,7 @@ void JoinCluster(RedisRaftCtx *rr, NodeAddrListElement *el, RaftReq *req, void (
 /* migrate.c */
 void importKeys(RedisRaftCtx *rr, raft_entry_t *entry);
 int cmdRaftImport(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
-
+void MigrateKeys(RedisRaftCtx *rr, RaftReq *req);
 
 /* commands.c */
 RRStatus CommandSpecInit(RedisModuleCtx *ctx, RedisRaftConfig *config);
