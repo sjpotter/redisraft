@@ -126,8 +126,6 @@ void RaftExecuteCommandArray(RedisModuleCtx *ctx,
 {
     int i;
 
-    HandleAsking(cmds);
-
     for (i = 0; i < cmds->len; i++) {
         RaftRedisCommand *c = cmds->commands[i];
 
@@ -1138,8 +1136,9 @@ RRStatus RedisRaftInit(RedisModuleCtx *ctx, RedisRaftCtx *rr, RedisRaftConfig *c
         rr->resp_call_fmt = "v";
     }
 
-    /* Client state for MULTI support */
+    /* Client state for MULTI/ASKING support */
     rr->multi_client_state = RedisModule_CreateDict(ctx);
+    rr->asking_client_state = RedisModule_CreateDict(ctx);
 
     /* Read configuration from Redis */
     if (ConfigReadFromRedis(rr) == RR_ERROR) {
