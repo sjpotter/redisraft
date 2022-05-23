@@ -284,8 +284,6 @@ void RaftExecuteCommandArray(RedisRaftCtx *rr,
 {
     int i;
 
-    HandleAsking(cmds);
-
     /* When we're in cluster mode, go through handleSharding. This will perform
      * hash slot validation and return an error / redirection if necessary. We do this
      * before checkLeader() to avoid multiple redirect hops.
@@ -1427,8 +1425,9 @@ RRStatus RedisRaftInit(RedisModuleCtx *ctx, RedisRaftCtx *rr, RedisRaftConfig *c
         rr->resp_call_fmt = "v";
     }
 
-    /* Client state for MULTI support */
+    /* Client state for MULTI/ASKING support */
     rr->multi_client_state = RedisModule_CreateDict(ctx);
+    rr->asking_client_state = RedisModule_CreateDict(ctx);
 
     /* Read configuration from Redis */
     if (ConfigReadFromRedis(rr) == RR_ERROR) {
