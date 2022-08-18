@@ -670,6 +670,14 @@ static void handleRedisCommandAppend(RedisRaftCtx *rr,
         return;
     }
 
+    /* Test Code */
+    for (int i = 0; i < cmds->len; i++) {
+        RaftRedisCommand *c = cmds->commands[i];
+        size_t cmd_len;
+        const char *cmd = RedisModule_StringPtrLen(c->argv[0], &cmd_len);
+        RedisModule_Assert(RedisModule_Call(ctx, cmd, "DMCv", &c->argv[1], c->argc - 1) == NULL);
+    }
+
     RaftReq *req = RaftReqInit(ctx, RR_REDISCOMMAND);
     RaftRedisCommandArrayMove(&req->r.redis.cmds, cmds);
 
