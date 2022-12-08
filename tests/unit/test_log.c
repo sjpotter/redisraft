@@ -7,10 +7,12 @@
 #include "../src/entrycache.h"
 #include "../src/log.h"
 
+#include <fcntl.h>
 #include <limits.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "cmocka.h"
@@ -542,6 +544,77 @@ static void test_meta_persistence(void **state)
     MetadataTerm(&m);
 }
 
+/* Loop over log file bytes and change one byte of the log file header.
+ * Verify we detect the corruption when we try to read the file. */
+static void test_corruption_header(void **state)
+{
+    Log *log;
+
+    log = LogCreate(LOGNAME, DBID, 1, 0, 1);
+    LogFree(log);
+
+    struct stat st;
+    stat(LOGNAME, &st);
+
+    /* Loop over the bytes and corrupt one byte each time. */
+    for (int i = 0; i < st.st_size; i++) {
+        int fd = open(LOGNAME, O_RDWR, S_IWUSR | S_IRUSR);
+        assert_true(fd > 0);
+
+        lseek(fd, i, SEEK_SET);
+        write(fd, "^", 1); // Alter the byte
+        close(fd);
+
+        log = LogOpen(LOGNAME, 0);
+        assert_null(log);
+
+        log = LogCreate(LOGNAME, DBID, 1, 0, 1);
+        LogFree(log);
+    }
+}
+
+static void test_corruption_entry(void **state)
+{
+    Log *log;
+
+    log = LogCreate(LOGNAME, DBID, 1, 0, 1);
+    __append_entry(log, 5000);
+    LogFree(log);
+
+    struct stat st;
+    stat(LOGNAME, &st);
+
+    size_t entry_begin = st.st_size;
+
+    log = LogOpen(LOGNAME, 0);
+    raft_entry_t *e = __make_entry_value(6000, "testvalue");
+    LogAppend(log, e);
+    LogFree(log);
+
+    stat(LOGNAME, &st);
+    size_t entry_end = st.st_size;
+
+    /* Loop over the bytes and corrupt one byte each time. */
+    for (size_t i = entry_begin; i < entry_end; i++) {
+        int fd = open(LOGNAME, O_RDWR, S_IWUSR | S_IRUSR);
+        assert_true(fd > 0);
+
+        lseek(fd, (off_t) i, SEEK_SET);
+        write(fd, "^", 1); // Alter the byte
+        close(fd);
+
+        log = LogOpen(LOGNAME, 0);
+        LogLoadEntries(log);
+
+        assert_int_equal(log->num_entries, 1);
+
+        LogAppend(log, e);
+        LogFree(log);
+    }
+
+    raft_entry_release(e);
+}
+
 const struct CMUnitTest log_tests[] = {
     cmocka_unit_test_setup_teardown(
         test_log_load_entries, setup_create_log, teardown_log),
@@ -569,5 +642,9 @@ const struct CMUnitTest log_tests[] = {
         test_entry_cache_fuzzer, NULL, NULL),
     cmocka_unit_test_setup_teardown(
         test_meta_persistence, cleanup_meta, cleanup_meta),
+    cmocka_unit_test_setup_teardown(
+        test_corruption_header, NULL, NULL),
+    cmocka_unit_test_setup_teardown(
+        test_corruption_entry, NULL, NULL),
     {.test_func = NULL},
 };

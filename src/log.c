@@ -231,7 +231,8 @@ static raft_entry_t *readEntry(Log *log, long *read_crc)
 
     /* data */
     if (FileRead(&log->file, e->data, length) != length ||
-        FileRead(&log->file, crlf, 2) != 2) {
+        FileRead(&log->file, crlf, 2) != 2 ||
+        crlf[0] != '\r' || crlf[1] != '\n') {
         goto error;
     }
 
@@ -324,17 +325,30 @@ void LogFree(Log *log)
 
 Log *LogOpen(const char *filename, bool keep_index)
 {
+    char buf[1024];
+
     Log *log = prepareLog(filename, keep_index);
     if (!log) {
         return NULL;
     }
 
-    if (readHeader(log, NULL) != RR_OK) {
-        LogFree(log);
-        return NULL;
+    long read_crc;
+    if (readHeader(log, &read_crc) != RR_OK) {
+        goto error;
+    }
+
+    /* validate CRC, by rebuilding header */
+    ssize_t len = generateHeader(log, buf, sizeof(buf));
+    long calc_crc = crc16_ccitt(0, buf, len);
+    if (read_crc != calc_crc) {
+        goto error;
     }
 
     return log;
+
+error:
+    LogFree(log);
+    return NULL;
 }
 
 int LogReset(Log *log, raft_index_t index, raft_term_t term)
