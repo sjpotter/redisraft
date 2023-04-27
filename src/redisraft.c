@@ -1337,14 +1337,14 @@ static int cmdRaftExpire(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
         return REDISMODULE_OK;
     }
 
-    int num_keys = argc-1;
+    int num_keys = argc - 1;
 
     ExpiredKeys expired_keys;
     expired_keys.num_keys = num_keys;
 
     long long ttl;
 
-    int ret = RedisModule_StringToLongLong(argv[argc-1], &ttl);
+    int ret = RedisModule_StringToLongLong(argv[argc - 1], &ttl);
     if (ret != REDISMODULE_OK) {
         RedisModule_ReplyWithError(ctx, "failed to parse ttl");
         return REDISMODULE_OK;
@@ -1352,7 +1352,7 @@ static int cmdRaftExpire(RedisModuleCtx *ctx, RedisModuleString **argv, int argc
 
     expired_keys.keys = RedisModule_Calloc(num_keys, sizeof(ExpiredKey));
 
-    for (int i = 0; i < argc-1; i++) {
+    for (int i = 0; i < argc - 1; i++) {
         expired_keys.keys[i].key_name = argv[i];
         if (ttl == 0) {
             RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[i], REDISMODULE_OPEN_KEY_NOEFFECTS);
@@ -1540,7 +1540,7 @@ static int cmdRaftDebug(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
         }
         return REDISMODULE_OK;
     } else if (!strncasecmp(cmd, "expire", cmdlen) && argc > 2) {
-        return cmdRaftExpire(ctx, argv+2, argc-2);
+        return cmdRaftExpire(ctx, argv + 2, argc-2);
     } else {
         RedisModule_ReplyWithError(ctx, "ERR invalid debug subcommand");
     }
@@ -1788,7 +1788,7 @@ static void cmdToAbsolute(RedisModuleString *cmd, RedisModuleCommandFilterCtx *f
         RedisModule_CommandFilterArgReplace(filter, 2, RedisModule_CreateStringPrintf(NULL, "%lld", new_time));
     } else if (strncasecmp("pexpire", cmd_str, cmd_str_len) == 0) {
         RedisModule_CommandFilterArgReplace(filter, 0, RedisModule_CreateString(NULL, "pexpireat", 9));
-        long long int new_time = tv.tv_sec*1000 + tv.tv_usec + delta;
+        long long int new_time = tv.tv_sec * 1000 + tv.tv_usec + delta;
         RedisModule_CommandFilterArgReplace(filter, 2, RedisModule_CreateStringPrintf(NULL, "%lld", new_time));
     }
 }

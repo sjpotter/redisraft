@@ -711,7 +711,7 @@ static void expireKeys(RedisRaftCtx *rr, raft_entry_t *entry, RaftReq *req)
         RedisModule_CloseKey(key);
     }
 
-    for (size_t i=0; i < expired_keys.num_keys; i++) {
+    for (size_t i = 0; i < expired_keys.num_keys; i++) {
         RedisModule_FreeString(NULL, expired_keys.keys[i].key_name);
     }
     RedisModule_Free(expired_keys.keys);

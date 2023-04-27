@@ -546,7 +546,7 @@ raft_entry_t *RaftRedisSerializeExpireKeys(struct ExpiredKeys *expired_keys)
     p += n;
     sz -= n;
 
-    for(size_t i = 0; i < expired_keys->num_keys; i++) {
+    for (size_t i = 0; i < expired_keys->num_keys; i++) {
         n = encodeString(p, sz, expired_keys->keys[i].key_name);
         RedisModule_Assert(n != -1);
         p += n;
