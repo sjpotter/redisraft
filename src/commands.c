@@ -28,6 +28,9 @@ static const CommandSpec commands[] = {
     {"save",                        CMD_SPEC_UNSUPPORTED                         },
     {"bgsave",                      CMD_SPEC_UNSUPPORTED                         },
 
+    {"expire",                      CMD_SPEC_RELATIVE_TIME                       },
+    {"pexpire",                     CMD_SPEC_RELATIVE_TIME                       },
+
     {"eval",                        CMD_SPEC_SCRIPTS                             },
     {"evalsha",                     CMD_SPEC_SCRIPTS                             },
     {"eval_ro",                     CMD_SPEC_SCRIPTS                             },

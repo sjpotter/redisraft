@@ -522,3 +522,75 @@ RRStatus RaftRedisDeserializeTimeout(const void *buf, size_t buf_size, raft_inde
 
     return RR_OK;
 }
+
+raft_entry_t *RaftRedisSerializeExpireKeys(struct ExpiredKeys *expired_keys)
+{
+    int n;
+
+    size_t sz = calcIntSerializedLen(expired_keys->num_keys); /* idx we are timing out */
+    for (size_t i = 0; i < expired_keys->num_keys; i++) {
+        sz += calcSerializeStringSize(expired_keys->keys[i].key_name);
+        sz += calcIntSerializedLen(expired_keys->keys[i].abs_ttl);
+    }
+    sz++;
+
+    raft_entry_t *ety = raft_entry_new(sz);
+    ety->type = RAFT_LOGTYPE_EXPIRE_KEYS;
+    ety->id = rand();
+
+    char *p = ety->data;
+
+    /* Encode idx of entry we are timing out */
+    n = encodeInteger('*', p, sz, expired_keys->num_keys);
+    RedisModule_Assert(n != -1);
+    p += n;
+    sz -= n;
+
+    for(size_t i = 0; i < expired_keys->num_keys; i++) {
+        n = encodeString(p, sz, expired_keys->keys[i].key_name);
+        RedisModule_Assert(n != -1);
+        p += n;
+        sz -= n;
+        n = encodeInteger('*', p, sz, expired_keys->keys[i].abs_ttl);
+        RedisModule_Assert(n != -1);
+        p += n;
+        sz -= n;
+    }
+
+    return ety;
+}
+
+RRStatus RaftRedisDeserializeExpireKeys(const void *buf, size_t buf_size, ExpiredKeys *expired_keys)
+{
+    const char *p = buf;
+    int n;
+
+    /* Read num keys */
+    if ((n = decodeInteger(p, buf_size, '*', &expired_keys->num_keys)) < 0 || !expired_keys->num_keys) {
+        return RR_ERROR;
+    }
+    p += n;
+    buf_size -= n;
+
+    expired_keys->keys = RedisModule_Calloc(expired_keys->num_keys, sizeof(ExpiredKey));
+
+    for (size_t i = 0; i < expired_keys->num_keys; i++) {
+        if ((n = decodeString(p, buf_size, &expired_keys->keys[i].key_name)) < 0) {
+            return RR_ERROR;
+        }
+        p += n;
+        buf_size -= n;
+
+        size_t ttl;
+        if ((n = decodeInteger(p, buf_size, '*', &ttl)) < 0) {
+            return RR_ERROR;
+        }
+        expired_keys->keys[i].abs_ttl = ttl;
+        p += n;
+        buf_size -= n;
+    }
+
+    RedisModule_Assert(buf_size == 1); /* should only have the final '\0' at the end of the data */
+
+    return RR_OK;
+}

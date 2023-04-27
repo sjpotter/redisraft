@@ -498,6 +498,7 @@ enum RaftReqType {
     RR_DELETE_UNLOCK_KEYS,
     RR_END_SESSION,
     RR_CLIENT_UNBLOCK,
+    RR_EXPIRE_KEYS,
     RR_RAFTREQ_MAX
 };
 
@@ -590,6 +591,7 @@ typedef struct ShardGroup {
 #define RAFT_LOGTYPE_IMPORT_KEYS         (RAFT_LOGTYPE_NUM + 6)
 #define RAFT_LOGTYPE_END_SESSION         (RAFT_LOGTYPE_NUM + 7)
 #define RAFT_LOGTYPE_TIMEOUT_BLOCKED     (RAFT_LOGTYPE_NUM + 8)
+#define RAFT_LOGTYPE_EXPIRE_KEYS         (RAFT_LOGTYPE_NUM + 9)
 
 #define MAX_AUTH_STRING_ARG_LENGTH 255
 
@@ -664,6 +666,16 @@ typedef struct BlockedCommand {
     struct sc_list blocked_list;
 } BlockedCommand;
 
+typedef struct ExpiredKey {
+    RedisModuleString *key_name;
+    mstime_t abs_ttl;
+} ExpiredKey;
+
+typedef struct ExpiredKeys {
+    size_t num_keys;
+    ExpiredKey *keys;
+} ExpiredKeys;
+
 #define SNAPSHOT_RESULT_MAGIC 0x70616e73 /* "snap" */
 
 typedef struct SnapshotResult {
@@ -692,6 +704,7 @@ typedef struct {
 #define CMD_SPEC_BLOCKING       (1 << 8)  /* Blocking command */
 #define CMD_SPEC_MULTI          (1 << 9)  /* a MULTI */
 #define CMD_SPEC_SUBCOMMAND     (1 << 10) /* a command with subcommand specs */
+#define CMD_SPEC_RELATIVE_TIME  (1 << 11) /* a command that takes relative, convert to absolute command/time */
 
 /* Command filtering re-entrancy counter handling.
  *
@@ -832,6 +845,8 @@ raft_entry_t *RaftRedisLockKeysSerialize(RedisModuleString **argv, size_t argc);
 RedisModuleString **RaftRedisLockKeysDeserialize(const void *buf, size_t buf_size, size_t *num_keys);
 raft_entry_t *RaftRedisSerializeTimeout(raft_index_t idx, bool error);
 RRStatus RaftRedisDeserializeTimeout(const void *buf, size_t buf_size, raft_index_t *idx, bool *error);
+raft_entry_t *RaftRedisSerializeExpireKeys(struct ExpiredKeys *expired_keys);
+RRStatus RaftRedisDeserializeExpireKeys(const void *buf, size_t buf_size, ExpiredKeys *expired_keys);
 
 /* redisraft.c */
 RRStatus RedisRaftCtxInit(RedisRaftCtx *rr, RedisModuleCtx *ctx);

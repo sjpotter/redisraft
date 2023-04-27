@@ -13,18 +13,42 @@ int calcIntSerializedLen(size_t val)
 {
     if (val < 10) {
         return 3;
-    } else if (val < 100) {
+    } else if (val < 100UL) {
         return 4;
-    } else if (val < 1000) {
+    } else if (val < 1000UL) {
         return 5;
-    } else if (val < 10000) {
+    } else if (val < 10000UL) {
         return 6;
-    } else if (val < 100000) {
+    } else if (val < 100000UL) {
         return 7;
-    } else if (val < 1000000) {
+    } else if (val < 1000000UL) {
         return 8;
-    } else if (val < 10000000) {
+    } else if (val < 10000000UL) {
         return 9;
+    } else if (val < 100000000UL) {
+        return 10;
+    } else if (val < 1000000000UL) {
+        return 11;
+    } else if (val < 10000000000UL) {
+        return 12;
+    } else if (val < 100000000000UL) {
+        return 13;
+    } else if (val < 1000000000000UL) {
+        return 14;
+    } else if (val < 10000000000000UL) {
+        return 15;
+    } else if (val < 100000000000000UL) {
+        return 16;
+    } else if (val < 1000000000000000UL) {
+        return 17;
+    } else if (val < 10000000000000000UL) {
+        return 18;
+    } else if (val < 100000000000000000UL) {
+        return 19;
+    } else if (val < 1000000000000000000UL) {
+        return 20;
+    } else if (val < 10000000000000000000UL) {
+        return 21;
     } else {
         return 22;
     }

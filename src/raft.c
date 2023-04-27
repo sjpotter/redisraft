@@ -31,6 +31,7 @@ const char *RaftReqTypeStr[] = {
     [RR_DELETE_UNLOCK_KEYS] = "RR_DELETE_UNLOCK_KEYS",
     [RR_END_SESSION] = "RR_END_SESSION",
     [RR_CLIENT_UNBLOCK] = "RR_CLIENT_UNBLOCK",
+    [RR_EXPIRE_KEYS] = "RR_EXPIRE_KEYS",
 };
 
 /* Forward declarations */
@@ -688,6 +689,39 @@ static void timeoutBlockedCommand(RedisRaftCtx *rr, raft_entry_t *entry, RaftReq
     }
 }
 
+static void expireKeys(RedisRaftCtx *rr, raft_entry_t *entry, RaftReq *req)
+{
+    ExpiredKeys expired_keys;
+    int ret = RaftRedisDeserializeExpireKeys(entry->data, entry->data_len, &expired_keys);
+    RedisModule_Assert(ret == RR_OK);
+
+    for (size_t i = 0; i < expired_keys.num_keys; i++) {
+        if (expired_keys.keys[i].abs_ttl == REDISMODULE_NO_EXPIRE) {
+            /* key isn't set to expire */
+            continue;
+        }
+
+        int flags = REDISMODULE_WRITE | REDISMODULE_OPEN_KEY_NOEFFECTS;
+        RedisModuleKey *key = RedisModule_OpenKey(rr->ctx, expired_keys.keys[i].key_name, flags);
+        if (key != NULL && expired_keys.keys[i].abs_ttl == RedisModule_GetAbsExpire(key)) {
+            int ret = RedisModule_DeleteKey(key);
+            RedisModule_Assert(ret == REDISMODULE_OK);
+        }
+
+        RedisModule_CloseKey(key);
+    }
+
+    for (size_t i=0; i < expired_keys.num_keys; i++) {
+        RedisModule_FreeString(NULL, expired_keys.keys[i].key_name);
+    }
+    RedisModule_Free(expired_keys.keys);
+
+    if (req) {
+        RedisModule_ReplyWithSimpleString(req->ctx, "OK");
+        RaftReqFree(req);
+    }
+}
+
 /*
  * Execution of Raft log on the local instance.
  *
@@ -1085,6 +1119,9 @@ static int raftApplyLog(raft_server_t *raft, void *user_data, raft_entry_t *entr
             break;
         case RAFT_LOGTYPE_TIMEOUT_BLOCKED:
             timeoutBlockedCommand(rr, entry, req);
+            break;
+        case RAFT_LOGTYPE_EXPIRE_KEYS:
+            expireKeys(rr, entry, req);
             break;
         default:
             break;

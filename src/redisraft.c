@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/time.h>
 
 RedisModuleCtx *redisraft_log_ctx = NULL;
 
@@ -1326,6 +1327,63 @@ static int cmdRaftShardGroup(RedisModuleCtx *ctx, RedisModuleString **argv, int 
     }
 }
 
+static int cmdRaftExpire(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
+{
+    RedisRaftCtx *rr = &redis_raft;
+
+    /* needs at least one key mentioned */
+    if (argc < 2) {
+        RedisModule_WrongArity(ctx);
+        return REDISMODULE_OK;
+    }
+
+    int num_keys = argc-1;
+
+    ExpiredKeys expired_keys;
+    expired_keys.num_keys = num_keys;
+
+    long long ttl;
+
+    int ret = RedisModule_StringToLongLong(argv[argc-1], &ttl);
+    if (ret != REDISMODULE_OK) {
+        RedisModule_ReplyWithError(ctx, "failed to parse ttl");
+        return REDISMODULE_OK;
+    }
+
+    expired_keys.keys = RedisModule_Calloc(num_keys, sizeof(ExpiredKey));
+
+    for (int i = 0; i < argc-1; i++) {
+        expired_keys.keys[i].key_name = argv[i];
+        if (ttl == 0) {
+            RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[i], REDISMODULE_OPEN_KEY_NOEFFECTS);
+            if (key != NULL) {
+                /* could return REDISMODULE_NO_EXPIRE (-1), will be ignored at apply time */
+                expired_keys.keys[i].abs_ttl = RedisModule_GetAbsExpire(key);
+            } else {
+                /* treat non existent key as NO_EXPIRE, so will be ignored at apply time */
+                expired_keys.keys[i].abs_ttl = REDISMODULE_NO_EXPIRE;
+            }
+            RedisModule_CloseKey(key);
+        } else {
+            expired_keys.keys[i].abs_ttl = ttl;
+        }
+    }
+
+    RaftReq *req = RaftReqInit(ctx, RR_EXPIRE_KEYS);
+
+    raft_entry_req_t *entry = RaftRedisSerializeExpireKeys(&expired_keys);
+    RedisModule_Free(expired_keys.keys);
+
+    int e = RedisRaftRecvEntry(rr, entry, req);
+    if (e != 0) {
+        replyRaftError(req->ctx, NULL, e);
+        RaftReqFree(req);
+        return REDISMODULE_OK;
+    }
+
+    return REDISMODULE_OK;
+}
+
 /* RAFT.DEBUG COMPACT [async]
  *     Initiate the snapshot.
  *     If [async] is non-zero, snapshot will be triggered and client will get
@@ -1350,6 +1408,9 @@ static int cmdRaftShardGroup(RedisModuleCtx *ctx, RedisModuleString **argv, int 
  *
  * RAFT.DEBUG COMMANDSPEC <command>
  *     Returns the flags associated with this command in the commandspec dict
+ *
+ * RAFT.DEBUG EXPIRE <key0> ... <keyN>  <ttl>
+ *     Attempts to expire keys listed with the given ttl, if ttl = 0, uses ttl from the key
  */
 static int cmdRaftDebug(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
 {
@@ -1478,6 +1539,8 @@ static int cmdRaftDebug(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
             RedisModule_ReplyWithLongLong(ctx, flags);
         }
         return REDISMODULE_OK;
+    } else if (!strncasecmp(cmd, "expire", cmdlen) && argc > 2) {
+        return cmdRaftExpire(ctx, argv+2, argc-2);
     } else {
         RedisModule_ReplyWithError(ctx, "ERR invalid debug subcommand");
     }
@@ -1570,6 +1633,7 @@ static int cmdRaftRejectSubscribe(RedisModuleCtx *ctx, RedisModuleString **argv,
 
     /* If we reach here, it means log replay isn't completed yet. */
     replyClusterDown(ctx);
+
     return REDISMODULE_OK;
 }
 
@@ -1699,6 +1763,36 @@ void handleClientEvent(RedisModuleCtx *ctx, RedisModuleEvent eid,
     }
 }
 
+static void cmdToAbsolute(RedisModuleString *cmd, RedisModuleCommandFilterCtx *filter)
+{
+    LOG_WARNING("enter cmd to absolute time");
+
+    size_t cmd_str_len;
+    const char *cmd_str = RedisModule_StringPtrLen(cmd, &cmd_str_len);
+
+    struct timeval tv;
+    int ret = gettimeofday(&tv, NULL);
+    RedisModule_Assert(ret == 0);
+
+    RedisModuleString *delta_str = RedisModule_CommandFilterArgGet(filter, 2);
+    long long int delta;
+    ret = RedisModule_StringToLongLong(delta_str, &delta);
+    if (ret != REDISMODULE_OK) {
+        /* if it failed to parse here, don't convert, should fail later */
+        return;
+    }
+
+    if (strncasecmp("expire", cmd_str, cmd_str_len) == 0) {
+        RedisModule_CommandFilterArgReplace(filter, 0, RedisModule_CreateString(NULL, "expireat", 8));
+        long long new_time = tv.tv_sec + delta;
+        RedisModule_CommandFilterArgReplace(filter, 2, RedisModule_CreateStringPrintf(NULL, "%lld", new_time));
+    } else if (strncasecmp("pexpire", cmd_str, cmd_str_len) == 0) {
+        RedisModule_CommandFilterArgReplace(filter, 0, RedisModule_CreateString(NULL, "pexpireat", 9));
+        long long int new_time = tv.tv_sec*1000 + tv.tv_usec + delta;
+        RedisModule_CommandFilterArgReplace(filter, 2, RedisModule_CreateStringPrintf(NULL, "%lld", new_time));
+    }
+}
+
 /* Command filter callback that intercepts normal Redis commands and prefixes them
  * with a RAFT command prefix in order to divert them to execute inside RedisRaft.
  */
@@ -1746,6 +1840,10 @@ static void interceptRedisCommands(RedisModuleCommandFilterCtx *filter)
             RedisModule_CommandFilterArgInsert(filter, 0, s);
         }
         return;
+    }
+
+    if (flags != -1 && (flags & CMD_SPEC_RELATIVE_TIME)) {
+        cmdToAbsolute(cmd, filter);
     }
 
     /* Prepend RAFT to the original command */
